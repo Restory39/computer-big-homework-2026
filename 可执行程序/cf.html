@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codeforces 用户数据可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        /* 用户信息卡片 */
+        .user-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #666;
+            background-size: cover;
+            background-position: center;
+        }
+        .info-text h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        .info-text p {
+            color: #666;
+            line-height: 1.6;
+        }
+        /* 等级颜色（按CF官方等级对应） */
+        .newbie { color: #808080; }
+        .pupil { color: #008000; }
+        .specialist { color: #03A89E; }
+        .expert { color: #0000FF; }
+        .candidate { color: #AA00AA; }
+        .master { color: #FF8C00; }
+        .grandmaster { color: #FF0000; }
+
+        /* 图表 */
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        #rating-chart, #ac-chart {
+            width: 100%;
+            height: 400px;
+        }
+
+        /* 比赛列表 */
+        .contest-list, .problem-list {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .contest-list h3, .problem-list h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f8f9fa;
+            color: #555;
+        }
+        .solved { color: #008000; }
+        .unsolved { color: #808080; }
+        .after-contest { color: #0066cc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Codeforces 用户比赛数据可视化</h1>
+
+        <div class="search-box">
+            <input type="text" id="cfIdInput" placeholder="请输入Codeforces用户ID">
+            <button id="searchBtn">搜索</button>
+        </div>
+        <div class="filter-box">
+            <span>时间筛选：</span>
+            <select id="timeFilter">
+                <option value="all">全部战绩</option>
+                <option value="30">近30天</option>
+                <option value="90">近90天</option>
+                <option value="180">近180天</option>
+            </select>
+        </div>
+        <div class="user-card">
+            <div class="user-info">
+                <div class="avatar" id="user-avatar">?</div>
+                <div class="info-text">
+                <h2 id="user-handle">QAQ</h2>
+                <p>当前等级：<span id="current-rank">QWQ</span></p>
+                <p>当前分数：<span id="current-rating">0</span></p>
+                <p>最高等级：<span id="max-rank">Legendary Grandmaster</span>，最高分数：<span id="max-rating">0</span></p>
+                <p>比赛次数：<span id="contest-count">0</span> 次 | 近180天比赛：<span id="recent-contest">0</span> 次</p>
+                <p>已AC题目：<span id="ac-total" class="solved">0</span> 题</p>
+            </div>
+            </div>
+        </div>
+
+        <!--  Rating 变化 -->
+        <div class="chart-container">
+            <h3 style="margin-bottom:15px; color:#333;">Rating 变化趋势</h3>
+            <div id="rating-chart"></div>
+        </div>
+
+        <!-- AC题目统计饼图 -->
+        <div class="chart-container">
+            <h3 style="margin-bottom:15px; color:#333;">AC题目情况分布</h3>
+            <div id="ac-chart"></div>
+        </div>
+
+        <div class="contest-list">
+            <h3>比赛记录</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>比赛名称</th>
+                        <th>比赛时间</th>
+                        <th>赛前等级</th>
+                        <th>赛后等级</th>
+                        <th>排名</th>
+                        <th>分数变化</th>
+                    </tr>
+                </thead>
+                <tbody id="contest-tbody"></tbody>
+            </table>
+        </div>
+
+        <!-- 补题情况列表-->
+        <div class="problem-list">
+            <h3>题目提交与补题情况</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>题目ID</th>
+                        <th>题目名称</th>
+                        <th>提交时间</th>
+                        <th>提交状态</th>
+                        <th>是否为赛后补题</th>
+                    </tr>
+                </thead>
+                <tbody id="problem-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+   <script>
+ 
+    const ratingChartDom = document.getElementById('rating-chart');
+    const ratingChart = echarts.init(ratingChartDom);
+    const acChartDom = document.getElementById('ac-chart');
+    const acChart = echarts.init(acChartDom);
+
+    let allContestData = [];
+    let allAcProblems = [];
+
+    fetch("data.json")
+    .then(res => res.json())
+    .then(data => {
+            let handleDom = document.getElementById('user-handle');
+            let rankDom = document.getElementById('current-rank');
+            let maxRankDom = document.getElementById('max-rank');
+
+            handleDom.textContent = data.handle;
+            rankDom.textContent = data.currentRank;
+            document.getElementById('current-rating').textContent = data.currentRating;
+            maxRankDom.textContent = data.maxRank;
+            document.getElementById('max-rating').textContent = data.maxRating;
+            document.getElementById('contest-count').textContent = data.contestCount;
+            document.getElementById('recent-contest').textContent = data.recentContest;
+            document.getElementById('ac-total').textContent = data.acTotal || 0;
+
+            let rankClass = getRankClass(data.currentRating);
+            handleDom.className = rankClass;
+            rankDom.className = rankClass;
+            maxRankDom.className = getRankClass(data.maxRating);
+
+
+        if(data.avatar){
+            document.getElementById('user-avatar').innerHTML = "";
+            document.getElementById('user-avatar').style.backgroundImage = "url("+data.avatar+")";
+            document.getElementById('user-avatar').style.backgroundSize = "cover";
+        }
+
+        allContestData = data.records || [];
+        allAcProblems = data.acProblems || [];
+
+        fillContestTable(allContestData);
+        drawRatingChart(allContestData);
+        drawAcChart(allContestData, allAcProblems);
+        fillProblemTable(allContestData, allAcProblems);
+    })
+    .catch(err=>{
+        console.log("读取data.json失败：",err);
+    });
+
+
+    function fillContestTable(list){
+        const tbody = document.getElementById('contest-tbody');
+        tbody.innerHTML = "";
+
+        list.forEach(item => {
+            let d = new Date(item.time * 1000);
+            let dateStr = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+            let diff = item.newRating - item.oldRating;
+            let diffStr = diff >= 0 ? "+" + diff : diff;
+
+            let tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${item.name}</td>
+                <td>${dateStr}</td>
+                <td class="${getRankClass(item.oldRating)}">${item.oldRating}</td>
+                <td class="${getRankClass(item.newRating)}">${item.newRating}</td>
+                <td>${item.rank}</td>
+                <td>${diffStr}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function drawRatingChart(list){
+        let dateArr = [];
+        let ratingArr = [];
+        let nameArr = [];
+
+        list.forEach(item=>{
+            let d = new Date(item.time * 1000);
+            dateArr.push(`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`);
+            ratingArr.push(item.newRating);
+            nameArr.push(item.name);
+        });
+
+        const option = {
+            tooltip: {
+                trigger: 'axis',
+                formatter: params => {
+                    const idx = params[0].dataIndex;
+                    return `比赛: ${nameArr[idx]}<br>日期: ${dateArr[idx]}<br>Rating: ${ratingArr[idx]}`;
+                }
+            },
+            xAxis: {
+                type: 'category',
+                data: dateArr,
+                axisLabel: { rotate: 45 }
+            },
+            yAxis: {
+                type: 'value',
+                name: 'Rating'
+            },
+            series: [{
+                name: 'Rating',
+                type: 'line',
+                data: ratingArr,
+                smooth: true,
+                lineStyle: { width: 3, color: '#FF0000' },
+                itemStyle: { color: '#FF0000' }
+            }]
+        };
+        ratingChart.setOption(option);
+    }
+
+   function drawAcChart(contests, problems){
+    let contestAc = 0;
+    let afterAc = 0;
+
+    problems.forEach(p => {
+        let isContest = contests.some(c => {
+            let contestStart = c.time * 1000;
+            let acTime = p.time * 1000;
+            let isDiv3 = /Div\.?\s*3/i.test(c.name);
+            let duration = isDiv3 ? 8100 : 7200;
+            let threshold = duration * 1000;
+            return Math.abs(acTime - contestStart) < threshold;
+        });
+        if(isContest) contestAc++;
+        else afterAc++;
+    });
+
+    const option = {
+        tooltip: { trigger: 'item' },
+        legend: { orient: 'vertical', left: 'left' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            avoidLabelOverlap: false,
+            itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+            label: { show: false, position: 'center' },
+            emphasis: {
+                label: { show: true, fontSize: 20, fontWeight: 'bold' }
+            },
+            labelLine: { show: false },
+            data: [
+                { value: contestAc, name: '比赛中AC', itemStyle: { color: '#008000' } },
+                { value: afterAc, name: '赛后补题', itemStyle: { color: '#0066cc' } }
+            ]
+        }]
+    };
+    acChart.setOption(option);
+}
+
+   function fillProblemTable(contests, problems){
+    const tbody = document.getElementById('problem-tbody');
+    tbody.innerHTML = "";
+
+    problems.forEach(p => {
+        let acDate = new Date(p.time * 1000);
+        let dateStr = `${acDate.getFullYear()}-${acDate.getMonth()+1}-${acDate.getDate()}`;
+
+        let isAfterContest = !contests.some(c => {
+            let contestStart = c.time * 1000;
+            let acTime = p.time * 1000;
+            let isDiv3 = /Div\.?\s*3/i.test(c.name);
+            let duration = isDiv3 ? 8100 : 7200;
+            let threshold = duration * 1000;
+            return Math.abs(acTime - contestStart) < threshold;
+        });
+
+        let tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${p.contestId}${p.index}</td>
+            <td>${p.name}</td>
+            <td>${dateStr}</td>
+            <td class="solved">已AC</td>
+            <td class="${isAfterContest ? 'after-contest' : 'solved'}">${isAfterContest ? '是（赛后补题）' : '否（比赛中提交）'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+
+    // 等级颜色
+function getRankClass(rating) {
+    if (rating < 1200) return 'newbie';
+    if (rating < 1400) return 'pupil';
+    if (rating < 1600) return 'specialist';
+    if (rating < 1900) return 'expert';
+    if (rating < 2100) return 'candidate';
+    if (rating < 2300) return 'master';
+    return 'grandmaster';
+}
+
+    // 时间筛选
+    document.getElementById('timeFilter').addEventListener('change', function(){
+        let val = this.value;
+        let now = Date.now();
+        let filterList = [];
+
+        if(val === "all"){
+            filterList = allContestData;
+        }else{
+            let day = parseInt(val);
+            let ms = day * 24 * 60 * 60 * 1000;
+            filterList = allContestData.filter(item=>{
+                return now - item.time*1000 <= ms;
+            });
+        }
+        fillContestTable(filterList);
+        drawRatingChart(filterList);
+    })
+</script>
+</body>
+</html>
